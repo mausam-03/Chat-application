@@ -13,3 +13,129 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String
+  email     String   @unique
+  password  String
+  avatarUrl String?
+  createdAt DateTime @default(now())
+
+  messagesSent      Message[]
+  conversations     ConversationParticipant[]
+  messageStatuses   MessageStatus[]
+  attachments       Attachment[]
+  notifications     Notification[]
+  presence          UserPresence?
+}
+
+model Conversation {
+  id        Int      @id @default(autoincrement())
+  type      ConversationType
+  name      String?
+  createdAt DateTime @default(now())
+
+  participants ConversationParticipant[]
+  messages     Message[]
+}
+
+model ConversationParticipant {
+  id             Int      @id @default(autoincrement())
+  conversationId Int
+  userId         Int
+  joinedAt       DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+}
+
+model Message {
+  id             Int        @id @default(autoincrement())
+  conversationId Int
+  senderId       Int
+  content        String?
+  messageType    MessageType @default(TEXT)
+  createdAt      DateTime    @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  statuses    MessageStatus[]
+  attachments Attachment[]
+  notifications Notification[]
+}
+
+model MessageStatus {
+  id        Int               @id @default(autoincrement())
+  messageId Int
+  userId    Int
+  status    MessageStatusType
+  updatedAt DateTime          @updatedAt
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+}
+
+model Attachment {
+  id        Int      @id @default(autoincrement())
+  messageId Int
+  uploaderId Int
+  fileUrl   String
+  fileType  String?
+  fileSize  Int?
+  uploadedAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  uploader User    @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  @@index([messageId])
+}
+
+model UserPresence {
+  userId   Int @id
+  status   PresenceStatus
+  lastSeen DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  messageId Int?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message? @relation(fields: [messageId], references: [id])
+}
+
+
+enum ConversationType {
+  PRIVATE
+  GROUP
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  VIDEO
+}
+
+enum MessageStatusType {
+  SENT
+  DELIVERED
+  SEEN
+}
+
+enum PresenceStatus {
+  ONLINE
+  OFFLINE
+  TYPING
+  AWAY
+}
