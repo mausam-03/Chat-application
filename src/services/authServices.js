@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import prisma from "../prisma/client.js";
+import { generateAccessToken } from "../utils/token.js";  
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -32,6 +33,7 @@ export const register = async ({ name, email, password }) => {
   return user;
 };
 
+
 export const login = async ({ email, password }) => {
 
   const user = await prisma.user.findUnique({
@@ -42,29 +44,18 @@ export const login = async ({ email, password }) => {
     throw new Error("Invalid credentials");
   }
 
-  const valid = await bcrypt.compare(password, user.password);
+  const validPassword = await bcrypt.compare(password, user.password);
 
-  if (!valid) {
+  if (!validPassword) {
     throw new Error("Invalid credentials");
   }
 
-  const token = jwt.sign(
-    { id: user.id },
-    JWT_SECRET,
-    { expiresIn: "1d" }
-  );
+  const token = generateAccessToken({
+    id: user.id
+  });
 
   return token;
 };
-
-export const logout = async (userId) => {
-
-  // If using JWT only, logout is handled client side
-  // unless using token blacklist or refresh tokens
-
-  return true;
-};
-
 export const getMe = async (userId) => {
 
   const user = await prisma.user.findUnique({
