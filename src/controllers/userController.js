@@ -60,3 +60,19 @@ export const updateProfile = async (req, res, next) => {
     next(error);
   }
 };
+export const getUserPresence = async (req, res, next) => {
+  try {
+
+    const userId = parseInt(req.params.id);
+
+    const presence = await userService.getUserPresence(userId);
+
+    res.json({
+      success: true,
+      data: presence
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};

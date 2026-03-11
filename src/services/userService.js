@@ -60,3 +60,21 @@ export const updateProfile = async (userId, data) => {
 
   return updatedUser;
 };
+
+export const getUserPresence = async (userId) => {
+
+  const presence = await prisma.userPresence.findUnique({
+    where: {
+      userId
+    }
+  });
+
+  if (!presence) {
+    return {
+      status: "OFFLINE",
+      lastSeen: null
+    };
+  }
+
+  return presence;
+};
