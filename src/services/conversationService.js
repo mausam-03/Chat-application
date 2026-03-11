@@ -1,4 +1,4 @@
-const prisma = require("../prisma/client");
+const prisma = require("../config/client");
 export const createConversation = async (userId, data) => {
   const { type, name, participantIds } = data;
   if (type === "PRIVATE") {
