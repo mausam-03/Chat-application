@@ -23,18 +23,40 @@ export const chatSocket = (io) => {
             senderId,
             content,
           },
+          include: {
+            sender: {
+              select: {
+                id: true,
+                username: true,
+                avatarUrl: true,
+              },
+            },
+          },
+        });
+        //update conversation's updatedAt so conversations are sorted by recent activity
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: { updatedAt: new Date() },
         });
 
         // 2. Emit message to room
         io.to(conversationId).emit("receive_message", message);
 
       } catch (error) {
+        socket.emit("error", { message: "Failed to send message" });
         console.error(error);
       }
     });
 
-    socket.on("disconnect", () => {
+    socket.on("disconnect", async () => {
       console.log("User disconnected:", socket.id);
+      if(socket.userId) {
+        await prisma.user.update({
+            where: {id: socket.userId},
+            data: { isOnline: false, lastSeen: new Date() },
+        });
+        socket.broadcast.emit("presence_update", { userId: socket.userId, isOnline: false });
+      }
     });
 
   });
