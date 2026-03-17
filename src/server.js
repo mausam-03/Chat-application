@@ -1,8 +1,28 @@
-import "dotenv/config";
-import app from "./app.js";
+import express from "express";
+import http from "http";
+import { Server } from "socket.io";
+import { chatSocket } from "./sockets/chatSocket.js";
 
-const PORT = process.env.PORT || 3000;
+const app = express();
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Create HTTP server
+const server = http.createServer(app);
+
+// Attach Socket.IO
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+  },
 });
+
+chatSocket(io);
+
+app.get("/", (req, res) => {
+  res.send("Server running");
+});
+
+server.listen(3000, () => {
+  console.log("Server started");
+});
+
+export { io };
