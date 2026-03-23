@@ -18,10 +18,22 @@ export const chatSocket = (io) => {
     }
   });
 
-  io.on("connection", async (socket) => {
+ io.on("connection", async (socket) => {
     socket.userId = socket.user.id;
     console.log(`User connected: ${socket.id} (UserId: ${socket.userId})`);
+    try {
+  const conversations = await prisma.conversationParticipant.findMany({
+    where: { userId: socket.userId },
+  });
 
+  conversations.forEach((c) => {
+    socket.join(c.conversationId);
+  });
+
+  console.log(`User ${socket.userId} joined all conversations`);
+  } catch (err) {
+  console.error("Failed to join conversations:", err);
+  }
     // Update online status
     try {
       await prisma.user.update({
@@ -43,7 +55,39 @@ export const chatSocket = (io) => {
     // Send message
     socket.on("send_message", async (data) => {
       try {
-        const { conversationId, senderId, content } = data;
+        const { conversationId, content } = data;
+        const senderId = socket.userId;
+        
+         const isParticipant = await prisma.conversationParticipant.findUnique({
+      where: {
+        conversationId_userId: {
+          conversationId,
+          userId: senderId,
+        },
+      },
+    });
+    
+    if (!isParticipant) {
+      return socket.emit("error", { message: "Unauthorized" });
+    }
+
+    for (const participant of participants) {
+    if (participant.userId !== senderId) {
+    const user = await prisma.user.findUnique({
+      where: { id: participant.userId },
+      select: { isOnline: true },
+    });
+
+    if (!user?.isOnline) {
+      await prisma.notification.create({
+        data: {
+          userId: participant.userId,
+          messageId: message.id,
+        },
+      });
+    }
+  }
+ }
 
         // 1. Save message in DB
         const message = await prisma.message.create({
@@ -63,19 +107,79 @@ export const chatSocket = (io) => {
           },
         });
         //update conversation's updatedAt so conversations are sorted by recent activity
-        await prisma.conversation.update({
-          where: { id: conversationId },
-          data: { updatedAt: new Date() },
-        });
+        await prisma.userPresence.upsert({
+        where: { userId: socket.userId },
+        update: { status: "ONLINE" },
+        create: { userId: socket.userId, status: "ONLINE" },
+   });
 
         // 2. Emit message to room
         io.to(conversationId).emit("receive_message", message);
+
+        // 4. Create message status for all participants
+     const participants = await prisma.conversationParticipant.findMany({
+     where: { conversationId },
+   });
+
+     const statusEntries = participants.map((p) => ({
+     messageId: message.id,
+     userId: p.userId,
+     status: p.userId === senderId ? "SEEN" : "SENT",
+   }));
+
+  await prisma.messageStatus.createMany({
+  data: statusEntries,
+  });
 
       } catch (error) {
         socket.emit("error", { message: "Failed to send message" });
         console.error(error);
       }
     });
+
+    // Mark message as delivered
+    socket.on("message_delivered", async ({ messageId }) => {
+    try {
+    await prisma.messageStatus.updateMany({
+      where: {
+        messageId,
+        userId: socket.userId,
+      },
+      data: { status: "DELIVERED" },
+    });
+  } catch (err) {
+    console.error("Delivery update failed:", err);
+  }
+ });
+
+// Mark message as seen
+    socket.on("message_seen", async ({ messageId }) => {
+    try {
+    await prisma.messageStatus.updateMany({
+      where: {
+        messageId,
+        userId: socket.userId,
+      },
+      data: { status: "SEEN" },
+    });
+  } catch (err) {
+    console.error("Seen update failed:", err);
+  }
+});
+  
+
+    socket.on("typing", ({ conversationId }) => {
+    socket.to(conversationId).emit("typing", {
+    userId: socket.userId,
+  });
+});
+
+  socket.on("stop_typing", ({ conversationId }) => {
+  socket.to(conversationId).emit("stop_typing", {
+    userId: socket.userId,
+  });
+ });
+ });
 
     socket.on("disconnect", async () => {
       console.log("User disconnected:", socket.id);
@@ -88,5 +192,4 @@ export const chatSocket = (io) => {
       }
     });
 
-  });
-};
+}
