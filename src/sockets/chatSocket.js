@@ -47,10 +47,29 @@ export const chatSocket = (io) => {
     }
 
     // Join conversation room
-    socket.on("join_conversation", (conversationId) => {
+    socket.on("join_conversation", async(conversationId) => {
       socket.join(conversationId);
-      console.log(`User joined ${conversationId}`);
+      try {
+    // mark all messages as delivered
+    await prisma.messageStatus.updateMany({
+      where: {
+        userId: socket.userId,
+        message: {
+          conversationId,
+        },
+        status: "SENT",
+      },
+      data: {
+        status: "DELIVERED",
+      },
     });
+
+    console.log(`User joined ${conversationId}`);
+  } catch (err) {
+    console.error("Failed to update delivery status:", err);
+  }
+  });
+      });
 
     // Send message
     socket.on("send_message", async (data) => {
@@ -147,6 +166,12 @@ export const chatSocket = (io) => {
       },
       data: { status: "DELIVERED" },
     });
+    //notify other participants about delivery
+    socket.to(conversationId).emit("message_status_update", {
+      messageId,
+      userId: socket.userId,
+      status: "DELIVERED",
+    });
   } catch (err) {
     console.error("Delivery update failed:", err);
   }
@@ -161,6 +186,11 @@ export const chatSocket = (io) => {
         userId: socket.userId,
       },
       data: { status: "SEEN" },
+    });
+      socket.to(conversationId).emit("message_status_update", {
+      messageId,
+      userId: socket.userId,
+      status: "SEEN",
     });
   } catch (err) {
     console.error("Seen update failed:", err);
@@ -179,7 +209,32 @@ export const chatSocket = (io) => {
     userId: socket.userId,
   });
  });
- });
+ socket.on("mark_conversation_seen", async ({ conversationId }) => {
+  try {
+    await prisma.messageStatus.updateMany({
+      where: {
+        userId: socket.userId,
+        message: {
+          conversationId,
+        },
+        status: {
+          not: "SEEN",
+        },
+      },
+      data: {
+        status: "SEEN",
+      },
+    });
+
+    socket.to(conversationId).emit("conversation_seen", {
+      userId: socket.userId,
+      conversationId,
+    });
+
+  } catch (err) {
+    console.error("Bulk seen update failed:", err);
+  }
+});
 
     socket.on("disconnect", async () => {
       console.log("User disconnected:", socket.id);
@@ -191,5 +246,4 @@ export const chatSocket = (io) => {
         socket.broadcast.emit("presence_update", { userId: socket.userId, isOnline: false });
       }
     });
-
-}
+ }
