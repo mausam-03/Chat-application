@@ -73,11 +73,13 @@ export const chatSocket = (io) => {
 
     // Send message
     socket.on("send_message", async (data) => {
-      try {
-        const { conversationId, content } = data;
-        const senderId = socket.userId;
-        
-         const isParticipant = await prisma.conversationParticipant.findUnique({
+  try {
+    const { conversationId, content, attachments = [] } = data;
+
+    const senderId = socket.userId;
+
+    // 1. Check if user is part of conversation
+    const isParticipant = await prisma.conversationParticipant.findUnique({
       where: {
         conversationId_userId: {
           conversationId,
@@ -85,76 +87,103 @@ export const chatSocket = (io) => {
         },
       },
     });
-    
+
     if (!isParticipant) {
       return socket.emit("error", { message: "Unauthorized" });
     }
 
-    for (const participant of participants) {
-    if (participant.userId !== senderId) {
-    const user = await prisma.user.findUnique({
-      where: { id: participant.userId },
-      select: { isOnline: true },
+    // 2. Decide message type
+    let messageType = "TEXT";
+    if (attachments.length > 0) {
+      messageType = "FILE"; // can later refine IMAGE/VIDEO
+    }
+
+    // 3. Create message
+    const message = await prisma.message.create({
+      data: {
+        conversationId,
+        senderId,
+        content: content || null,
+        messageType,
+      },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            username: true,
+            avatarUrl: true,
+          },
+        },
+      },
     });
 
-    if (!user?.isOnline) {
-      await prisma.notification.create({
-        data: {
-          userId: participant.userId,
+    //  4. Save attachments (if any)
+    let savedAttachments = [];
+
+    if (attachments.length > 0) {
+      savedAttachments = await prisma.attachment.createMany({
+        data: attachments.map((file) => ({
           messageId: message.id,
-        },
+          uploaderId: senderId,
+          fileUrl: file.fileUrl,
+          fileType: file.fileType,
+          fileSize: file.fileSize,
+        })),
       });
     }
-  }
- }
 
-        // 1. Save message in DB
-        const message = await prisma.message.create({
-          data: {
-            conversationId,
-            senderId,
-            content,
-          },
-          include: {
-            sender: {
-              select: {
-                id: true,
-                username: true,
-                avatarUrl: true,
-              },
-            },
-          },
-        });
-        //update conversation's updatedAt so conversations are sorted by recent activity
-        await prisma.userPresence.upsert({
-        where: { userId: socket.userId },
-        update: { status: "ONLINE" },
-        create: { userId: socket.userId, status: "ONLINE" },
-   });
-
-        // 2. Emit message to room
-        io.to(conversationId).emit("receive_message", message);
-
-        // 4. Create message status for all participants
-     const participants = await prisma.conversationParticipant.findMany({
-     where: { conversationId },
-   });
-
-     const statusEntries = participants.map((p) => ({
-     messageId: message.id,
-     userId: p.userId,
-     status: p.userId === senderId ? "SEEN" : "SENT",
-   }));
-
-  await prisma.messageStatus.createMany({
-  data: statusEntries,
-  });
-
-      } catch (error) {
-        socket.emit("error", { message: "Failed to send message" });
-        console.error(error);
-      }
+    //  5. Fetch participants
+    const participants = await prisma.conversationParticipant.findMany({
+      where: { conversationId },
     });
+
+    //  6. Create message status
+    const statusEntries = participants.map((p) => ({
+      messageId: message.id,
+      userId: p.userId,
+      status: p.userId === senderId ? "SEEN" : "SENT",
+    }));
+
+    await prisma.messageStatus.createMany({
+      data: statusEntries,
+    });
+
+    // 7. Offline notification
+    for (const participant of participants) {
+      if (participant.userId !== senderId) {
+        const user = await prisma.user.findUnique({
+          where: { id: participant.userId },
+          select: { isOnline: true },
+        });
+
+        if (!user?.isOnline) {
+          await prisma.notification.create({
+            data: {
+              userId: participant.userId,
+              messageId: message.id,
+            },
+          });
+        }
+      }
+    }
+
+    //  8. Update conversation timestamp
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { updatedAt: new Date() },
+    });
+
+    //  9. Emit message
+    io.to(conversationId).emit("receive_message", {
+      ...message,
+      attachments, // send original array (frontend already has URLs)
+    });
+
+  } catch (error) {
+    console.error(error);
+    socket.emit("error", { message: "Failed to send message" });
+  }
+});
 
     // Mark message as delivered
     socket.on("message_delivered", async ({ messageId }) => {

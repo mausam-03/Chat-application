@@ -5,6 +5,8 @@ import {
   getMessageById,
   deleteMessage
 } from "../controllers/messageController.js";
+import { upload } from "../middleware/upload.js";
+import { sendAttachment } from "../controllers/messageController.js";
 
 import { authenticate } from "../middlewares/authMiddleware.js";
 
@@ -17,5 +19,7 @@ router.get("/conversations/:id/messages", authenticate, getConversationMessages)
 router.get("/:id", authenticate, getMessageById);
 
 router.delete("/:id", authenticate, deleteMessage);
+
+router.post("/attachment", upload.single("file"), sendAttachment);
 
 export default router;

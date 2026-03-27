@@ -76,3 +76,38 @@ export const deleteMessage = async (req, res, next) => {
     next(error);
   }
 };
+
+export const sendAttachment = async (req, res) => {
+  try {
+    const { conversationId } = req.body;
+    const senderId = req.user.id;
+
+    const file = req.file;
+
+    // create message
+    const message = await prisma.message.create({
+      data: {
+        conversationId,
+        senderId,
+        messageType: "FILE",
+      },
+    });
+
+    // save attachment
+    const attachment = await prisma.attachment.create({
+      data: {
+        messageId: message.id,
+        uploaderId: senderId,
+        fileUrl: `/uploads/${file.filename}`,
+        fileType: file.mimetype,
+        fileSize: file.size,
+      },
+    });
+
+    res.json({ message, attachment });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Upload failed" });
+  }
+};

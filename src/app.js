@@ -7,7 +7,7 @@ const app = express();
 
 app.use(express.json()); // parse JSON body
 
-
+app.use("/uploads", express.static("uploads"));
 /* -------------------- HEALTH CHECK -------------------- */
 
 app.get("/", (req, res) => {
