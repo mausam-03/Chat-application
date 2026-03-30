@@ -48,6 +48,16 @@ export const getUserConversations = async (userId) => {
       }
     },
     include: {
+      lastMessage: {
+        include: {
+          sender: {
+            select: {
+              id: true,
+              username: true,
+            },
+          },
+        },
+      },
       participants: {
         include: {
           user: {
@@ -99,7 +109,18 @@ export const getConversationById = async (conversationId, userId) => {
     throw new Error("Conversation not found");
   }
 
-  return conversation;
+  return conversations.map((conv) => {
+    const unreadCount = conv.messages.reduce(
+      (acc, msg) => acc + msg.statuses.length,
+      0
+    );
+
+    return {
+      ...conv,
+      unreadCount,
+      messages: undefined, // cleanup
+    };
+  });
 };
 
 //in future make sure only admins and creators can delete conversations

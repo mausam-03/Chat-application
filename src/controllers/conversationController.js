@@ -77,3 +77,17 @@ export const deleteConversation = async (req, res, next) => {
     next(error);
   }
 };
+
+
+export const fetchUserChats = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const chats = await conversationService.getUserConversations(userId);
+
+    res.json(chats);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch chats" });
+  }
+};

@@ -32,7 +32,9 @@ model Conversation {
   type      ConversationType
   name      String?
   createdAt DateTime @default(now())
-
+  
+  lastMessageId Int?
+  lastMessage   Message? @relation(fields: [lastMessageId], references: [id]) 
   participants ConversationParticipant[]
   messages     Message[]
 }
@@ -42,7 +44,7 @@ model ConversationParticipant {
   conversationId Int
   userId         Int
   joinedAt       DateTime @default(now())
-
+  
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 

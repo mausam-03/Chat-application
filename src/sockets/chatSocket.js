@@ -168,16 +168,24 @@ export const chatSocket = (io) => {
     }
 
     //  8. Update conversation timestamp
-    await prisma.conversation.update({
-      where: { id: conversationId },
-      data: { updatedAt: new Date() },
-    });
+   await prisma.conversation.update({
+    where: { id: conversationId },
+    data: {
+    lastMessageId: message.id,
+    updatedAt: new Date(),
+  },
+  });
 
     //  9. Emit message
     io.to(conversationId).emit("receive_message", {
       ...message,
       attachments, // send original array (frontend already has URLs)
     });
+
+    io.to(conversationId).emit("chat_list_update", {
+    conversationId,
+    lastMessage: message,
+  }); 
 
   } catch (error) {
     console.error(error);
