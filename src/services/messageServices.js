@@ -26,11 +26,21 @@ export const createMessage = async (senderId, data) => {
 };
 
 
-export const getConversationMessages = async (conversationId) => {
+export const getConversationMessages = async ({conversationId,cursor, limit = 20}) => {
 
   const messages = await prisma.message.findMany({
     where: {
       conversationId
+    },
+    take: limit,
+    ...(cursor && {
+      skip: 1, // skip cursor itself
+      cursor: {
+        id: cursor,
+      },
+    }),
+    orderBy: {
+      createdAt: "desc", // latest first
     },
     include: {
       sender: {

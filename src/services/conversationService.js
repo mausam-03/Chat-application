@@ -67,15 +67,38 @@ export const getUserConversations = async (userId) => {
               avatarUrl: true
             }
           }
+        
         }
-      }
+    },
+      messages: {
+        select: {
+          id: true,
+          statuses: {
+            where: {
+              userId,
+              status: { not: "SEEN" },
+            },
+          },
+        },
+      },
     },
     orderBy: {
       createdAt: "desc"
     }
   });
+ // calculate unread count
+  return conversations.map((conv) => {
+    const unreadCount = conv.messages.reduce(
+      (acc, msg) => acc + msg.statuses.length,
+      0
+    );
 
-  return conversations;
+    return {
+      ...conv,
+      unreadCount,
+      messages: undefined, // cleanup
+    };
+  });
 };
 
 ///get single conversation and make sure user belongs to it

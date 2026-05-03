@@ -24,11 +24,13 @@ export const createMessage = async (req, res, next) => {
 export const getConversationMessages = async (req, res, next) => {
   try {
 
-    const conversationId = parseInt(req.params.id);
-
-    const messages = await messageService.getConversationMessages(
-      conversationId
-    );
+    
+    const {conversationId, cursor, limit } = req.query;
+    const messages = await getMessagesByConversation({
+      conversationId: Number(conversationId),
+      cursor: cursor ? Number(cursor) : undefined,
+      limit: limit ? Number(limit) : 20,
+    });
 
     res.json({
       success: true,
